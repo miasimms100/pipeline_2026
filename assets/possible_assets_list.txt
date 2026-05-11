@@ -1,0 +1,2 @@
+https://github.com/erikflowers/weather-icons
+https://github.com/Makin-Things/weather-icons

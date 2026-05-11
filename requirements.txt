@@ -1,0 +1,6 @@
+requests
+pandas
+pyodbc
+openmeteo-requests
+requests-cache
+retry-requests
