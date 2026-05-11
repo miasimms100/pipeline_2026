@@ -7,9 +7,12 @@
 **Target Audience**: Louisville, KY residents and visitors  
 **Technology Stack**: Python, Dash, Plotly, Open-Meteo API  
 
-## Business Problem/Background
+##  Background
 
 This project proposes the development of an interactive weather application that provides personalized activity recommendations based on daily weather forecasts for Louisville, Kentucky. The app will leverage the Open-Meteo API to retrieve accurate weather data and use intelligent algorithms to suggest appropriate activities for users based on current and forecasted weather conditions.
+
+## Business Problem
+Hometown tourism stimulates our local economy. Many Louisvillians have not discovered all the attractions we have here. This is an attempt to keep our local communities engaged with events in Louisville.
 
 ## Objectives
 
