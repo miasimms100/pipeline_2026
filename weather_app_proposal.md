@@ -86,6 +86,9 @@ This project proposes the development of an interactive weather application that
 4. **User Interface**: Display weather data and recommendations through interactive dashboard
 5. **User Interaction**: Allow filtering and personalization of recommendations
 
+### Architecture Diagram
+![Pipeline Design Architecture](Pipelines%20Diagram%20V1.png)
+
 ## Data Sources and APIs
 
 ### Primary Data Source: Open-Meteo API
