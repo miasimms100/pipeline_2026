@@ -53,7 +53,7 @@ This project proposes the development of an interactive weather application that
 - **Activity Filtering**: Filter recommendations by activity type, duration, and weather tolerance
 - **Location Integration**: Map integration showing recommended activity locations in Louisville
 
-### Advanced Features
+### Advanced Features (Out of Scope for now)
 
 #### 4. Personalization
 - **User Preferences**: Save favorite activity types and weather preferences
