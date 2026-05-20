@@ -4,3 +4,5 @@ pyodbc
 openmeteo-requests
 requests-cache
 retry-requests
+SQLAlchemy
+supabase
