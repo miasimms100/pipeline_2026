@@ -2,4 +2,6 @@
 soil_data.py
 poke.py
 database_py
-api_practice2
+api_practice2.py
+key_val.txt
+.env

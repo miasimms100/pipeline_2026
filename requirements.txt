@@ -6,3 +6,6 @@ requests-cache
 retry-requests
 SQLAlchemy
 supabase
+psycopg2-binary
+openpyxl
+python-dotenv
