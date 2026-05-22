@@ -13,7 +13,7 @@ The schema is normalized to approximately Third Normal Form (3NF) by:
 ---
 ### ER Diagram
 
-![Weather ER Diagram](<Pipelines Diagram V1.png>)
+![Weather ER Diagram](<Weather_App_ERD.png>)
 
 ## Database Overview
 
