@@ -1,6 +1,6 @@
 """
 Week 3 teaching ETL pipeline: Transformation & Data Quality
-
+## minor change for demo purposes
 This file expands the original weather pipeline with explicit examples of:
 
 - Cleaning and normalization
