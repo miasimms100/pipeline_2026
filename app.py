@@ -211,11 +211,12 @@ app.layout = html.Main(
                     value=["culture", "nature"],
                     multi=True,
                 ),
-                html.Label(
-                    children=[
-                        html.Input(id="adult-only-toggle", type="checkbox", checked=False),
-                        html.Span("Include adult-only attractions"),
+                dcc.Checklist(
+                    id="adult-only-toggle",
+                    options=[
+                        {"label": "Include adult-only attractions", "value": "include"}
                     ],
+                    value=[],
                     className="checkbox-label",
                 ),
             ],
@@ -287,9 +288,9 @@ app.layout = html.Main(
     Output("forecast-table", "columns"),
     Input("date-select", "value"),
     Input("category-select", "value"),
-    Input("adult-only-toggle", "checked"),
+    Input("adult-only-toggle", "value"),
 )
-def update_recommendations(date_value: str, selected_categories: list[str], include_adult_only: bool):
+def update_recommendations(date_value: str, selected_categories: list[str], adult_only_values: list[str]):
     """Update forecast summaries and attraction recommendations from user inputs."""
     selected_categories = selected_categories or []
     selected_date = pd.to_datetime(date_value)
@@ -299,7 +300,7 @@ def update_recommendations(date_value: str, selected_categories: list[str], incl
         tourism_df,
         forecast_row,
         selected_categories,
-        bool(include_adult_only),
+        "include" in (adult_only_values or []),
     )
 
     cards = []
