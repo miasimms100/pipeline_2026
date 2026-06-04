@@ -10,6 +10,21 @@ Pipeline Repository for Summer 2026 cohorts
 
 ## Scripts
 
+### app.py
+**Purpose**: Dash weather recommendation app for Louisville attractions.
+
+**Workflow**:
+1. Reads `data/daily_weather_forecast.csv`
+2. Enriches weather codes with descriptions from `data/weather_codes.xlsx`
+3. Reads attraction details and category flags from `data/tourism.csv`
+4. Scores attractions using simple weather and category rules
+5. Displays Plotly temperature and precipitation charts with recommendation cards
+
+**Usage**:
+```bash
+python app.py
+```
+
 ### main.py
 **Purpose**: Production pipeline that fetches weather forecast data and merges it with weather code descriptions.
 
