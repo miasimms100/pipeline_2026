@@ -1,0 +1,100 @@
+body {
+    margin: 0;
+    background: #f6f7f9;
+    color: #1f2933;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.page {
+    width: min(1180px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 28px 0 40px;
+}
+
+.header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 22px 0;
+    border-bottom: 1px solid #d7dee6;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 34px;
+    letter-spacing: 0;
+}
+
+.header p {
+    max-width: 680px;
+    margin: 8px 0 0;
+    color: #52606d;
+    line-height: 1.45;
+}
+
+.controls {
+    display: grid;
+    grid-template-columns: auto 92px auto;
+    align-items: center;
+    gap: 10px;
+}
+
+.controls label {
+    font-weight: 700;
+}
+
+.controls input {
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid #bcccdc;
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.controls button {
+    height: 40px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 6px;
+    background: #146c94;
+    color: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.status {
+    margin: 18px 0;
+    padding: 12px 14px;
+    border-left: 4px solid #146c94;
+    background: #ffffff;
+    color: #334e68;
+}
+
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.metrics div,
+.suggestion-card,
+.recommendation-grid > div,
+.table-section {
+    background: #ffffff;
+    border: 1px solid #d7dee6;
+    border-radius: 8px;
+}
+
+.metrics div {
+    display: grid;
+    gap: 8px;
+    padding: 16px;
+}
+
+.metrics span {
+    color: #627d98;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
