@@ -9,6 +9,7 @@ Run with:
 """
 
 from pathlib import Path
+import os
 
 import pandas as pd
 import plotly.express as px
@@ -340,4 +341,4 @@ def update_recommendations(date_value: str, selected_categories: list[str], adul
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=int(os.getenv("PORT", "8050")))
