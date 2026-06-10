@@ -22,10 +22,10 @@ Optional:
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
 import pandas as pd
+import requests
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.types import Boolean, Date, Float, Integer, String, Time
@@ -36,7 +36,7 @@ DATA_DIR = BASE_DIR / "data"
 
 WEATHER_FORECAST_CSV = DATA_DIR / "daily_weather_forecast.csv"
 TOURISM_CSV = DATA_DIR / "tourism.csv"
-WEATHER_CODES_XLSX = DATA_DIR / "weather_codes.xlsx"
+WEATHER_CODES_XLSX = DATA_DIR / "weather_codes_v2.xlsx"
 
 CATEGORY_COLUMNS = [
     "water",
@@ -79,6 +79,72 @@ def table_reset_enabled() -> bool:
     return os.getenv("RESET_TABLES", "true").strip().lower() in {"1", "true", "yes", "y"}
 
 
+def refresh_forecast_csv() -> None:
+    """Fetch the latest Open-Meteo forecast and save it to the local CSV used by the ETL."""
+    print("Refreshing forecast CSV from Open-Meteo...")
+
+    params = {
+        "latitude": 38.2542,
+        "longitude": -85.7594,
+        "daily": [
+            "weather_code",
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "sunrise",
+            "sunset",
+            "precipitation_sum",
+            "precipitation_hours",
+            "precipitation_probability_max",
+            "daylight_duration",
+            "sunshine_duration",
+            "uv_index_max",
+        ],
+        "timezone": "America/New_York",
+        "forecast_days": 16,
+        "timeformat": "unixtime",
+        "wind_speed_unit": "mph",
+        "temperature_unit": "fahrenheit",
+        "precipitation_unit": "inch",
+    }
+
+    response = requests.get("https://api.open-meteo.com/v1/forecast", params=params)
+    response.raise_for_status()
+    payload = response.json()
+
+    daily_data = payload.get("daily", {})
+    if not daily_data:
+        raise RuntimeError(f"Open-Meteo returned no daily forecast data: {payload}")
+
+    forecast_df = pd.DataFrame(daily_data)
+    if "time" in forecast_df.columns:
+        forecast_df["date"] = pd.to_datetime(forecast_df["time"], unit="s")
+        forecast_df = forecast_df.drop(columns=["time"])
+        forecast_df = forecast_df.set_index(forecast_df["date"].dt.date)
+        forecast_df.index.name = "date"
+        forecast_df = forecast_df.drop(columns=["date"])
+
+    if "sunrise" in forecast_df.columns:
+        forecast_df["sunrise"] = pd.to_datetime(forecast_df["sunrise"], unit="s").dt.strftime("%H:%M")
+    if "sunset" in forecast_df.columns:
+        forecast_df["sunset"] = pd.to_datetime(forecast_df["sunset"], unit="s").dt.strftime("%H:%M")
+
+    weather_codes_df = pd.read_excel(WEATHER_CODES_XLSX)
+    if "weather_code" in weather_codes_df.columns and "weather_description" in weather_codes_df.columns:
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.merge(
+            weather_codes_df,
+            left_on="weather_code",
+            right_on="weather_code",
+            how="left",
+        )
+    else:
+        print("Warning: weather_codes_v2.xlsx missing weather_code or weather_description columns; saving forecast without descriptions.")
+
+    # Save without the pandas index to avoid creating an Unnamed column on read.
+    forecast_df.to_csv(WEATHER_FORECAST_CSV, index=False)
+    print(f"Saved refreshed forecast to {WEATHER_FORECAST_CSV}")
+
+
 # Schema creation
 # This function defines the tables and relationships used by the ETL process.
 # It optionally drops existing tables and recreates the schema from scratch.
@@ -94,14 +160,17 @@ def create_schema(engine) -> None:
 
     create_sql = """
     CREATE TABLE IF NOT EXISTS public.weather_code (
-        weather_code_id INTEGER PRIMARY KEY,
-        description TEXT NOT NULL
+        weather_code INTEGER PRIMARY KEY,
+        weather_category TEXT NOT NULL,
+        weather_description TEXT NOT NULL,
+        severity_level INTEGER,
+        assets TEXT
     );
 
     CREATE TABLE IF NOT EXISTS public.weather_forecast (
         forecast_id BIGSERIAL PRIMARY KEY,
         forecast_date DATE NOT NULL UNIQUE,
-        weather_code_id INTEGER NOT NULL REFERENCES public.weather_code(weather_code_id),
+        weather_code_id INTEGER NOT NULL REFERENCES public.weather_code(weather_code),
         temperature_max DOUBLE PRECISION,
         temperature_min DOUBLE PRECISION,
         sunrise TIME,
@@ -154,21 +223,17 @@ def create_schema(engine) -> None:
 # The weather codes file contains descriptions and one or more numeric codes per row.
 # This function expands those rows into a normalized table of weather_code_id -> description.
 def expand_weather_codes(weather_codes_df: pd.DataFrame) -> pd.DataFrame:
-    rows = []
+    """Normalize weather codes with category and severity from the v2 source."""
+    # Normalize 'asset' vs 'assets' column name, prefer 'assets'.
+    if "asset" in weather_codes_df.columns and "assets" not in weather_codes_df.columns:
+        weather_codes_df = weather_codes_df.rename(columns={"asset": "assets"})
 
-    for _, row in weather_codes_df.iterrows():
-        description = row["Description"]
-        codes = re.findall(r"\d+", str(row["Code"]))
+    # Include optional `assets` column if present in the source
+    cols = ["weather_code", "weather_category", "weather_description", "severity_level"]
+    if "assets" in weather_codes_df.columns:
+        cols.append("assets")
 
-        for code in codes:
-            rows.append(
-                {
-                    "weather_code_id": int(code),
-                    "description": description,
-                }
-            )
-
-    return pd.DataFrame(rows).drop_duplicates(subset=["weather_code_id"])
+    return weather_codes_df[cols].drop_duplicates(subset=["weather_code"]) 
 
 
 # Source ingestion
@@ -208,6 +273,32 @@ def build_weather_tables(
     weather_forecast_df["sunset"] = pd.to_datetime(
         weather_forecast_df["sunset"], format="%H:%M"
     ).dt.time
+
+    # Drop any unnamed/index columns and keep only the columns that match the
+    # target `weather_forecast` table to avoid accidental inserts of extra cols.
+    unnamed_cols = [c for c in weather_forecast_df.columns if c.startswith("Unnamed")]
+    if unnamed_cols:
+        weather_forecast_df = weather_forecast_df.drop(columns=unnamed_cols, errors="ignore")
+
+    expected_cols = [
+        "forecast_date",
+        "weather_code_id",
+        "temperature_max",
+        "temperature_min",
+        "sunrise",
+        "sunset",
+        "precipitation_sum",
+        "precipitation_hours",
+        "precipitation_probability_max",
+        "daylight_duration",
+        "sunshine_duration",
+        "uv_index_max",
+    ]
+
+    # Some source datasets may include extra merged columns (like weather_category,
+    # weather_description, severity_level, assets). These belong in `weather_code`.
+    # Select only the expected forecast columns for loading.
+    weather_forecast_df = weather_forecast_df[[c for c in expected_cols if c in weather_forecast_df.columns]]
 
     return weather_code_df, weather_forecast_df
 
@@ -309,8 +400,11 @@ def load_tables(
         "weather_code",
         engine,
         {
-            "weather_code_id": Integer(),
-            "description": String(),
+            "weather_code": Integer(),
+            "weather_category": String(),
+            "weather_description": String(),
+            "severity_level": Integer(),
+            "assets": String(),
         },
     )
     write_table(
@@ -383,6 +477,7 @@ def load_tables(
 def main() -> None:
     engine = create_engine(get_database_url())
 
+    refresh_forecast_csv()
     weather_df, weather_codes_df, tourism_df = load_source_files()
     weather_code_df, weather_forecast_df = build_weather_tables(weather_df, weather_codes_df)
     location_df, attraction_df, category_df, attraction_category_df = build_tourism_tables(
