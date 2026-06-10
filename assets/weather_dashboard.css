@@ -54,6 +54,27 @@ body {
     height: 18px;
 }
 
+.refresh-button {
+    grid-column: 2 / -1;
+    padding: 10px 16px;
+    background-color: #146c94;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s ease;
+}
+
+.refresh-button:hover {
+    background-color: #0f4c6f;
+}
+
+.refresh-button:active {
+    background-color: #0a3552;
+}
+
 .metrics,
 .dashboard-grid,
 .recommendation-grid {
@@ -63,7 +84,7 @@ body {
 }
 
 .metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
 }
 
 .dashboard-grid,
@@ -136,6 +157,134 @@ body {
 }
 
 .suggestion-card a {
+    color: #146c94;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.forecast-days-grid {
+    display: grid;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.forecast-placeholder,
+.empty-state {
+    padding: 18px;
+    background: #ffffff;
+    border: 1px solid #d7dee6;
+    border-radius: 10px;
+    color: #334e68;
+}
+
+.forecast-day-panel {
+    display: grid;
+    gap: 14px;
+    padding: 20px;
+    background: #ffffff;
+    border: 1px solid #d7dee6;
+    border-radius: 12px;
+}
+
+.forecast-day-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.forecast-day-header h2 {
+    margin: 0 0 6px;
+    font-size: 20px;
+}
+
+.forecast-day-header p {
+    margin: 0;
+    color: #52606d;
+}
+
+.weather-icon {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.day-filter-row {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.day-filter-row label {
+    font-weight: 700;
+}
+
+.day-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.day-summary-card {
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+.day-summary-card span {
+    display: block;
+    margin-bottom: 8px;
+    color: #627d98;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.day-summary-card strong {
+    line-height: 1.4;
+    color: #1f2933;
+}
+
+.day-summary-card small {
+    display: block;
+    margin-top: 8px;
+    color: #52606d;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.day-activities-group h3 {
+    margin: 0 0 10px;
+    font-size: 18px;
+}
+
+.day-activities {
+    display: grid;
+    gap: 10px;
+}
+
+.day-activity-card {
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.day-activity-card span {
+    color: #627d98;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.day-activity-card p {
+    margin: 0;
+    color: #334e68;
+}
+
+.day-activity-card a {
     color: #146c94;
     font-weight: 700;
     text-decoration: none;

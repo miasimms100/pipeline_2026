@@ -12,8 +12,9 @@ from pathlib import Path
 import os
 
 import pandas as pd
-import plotly.express as px
-from dash import Dash, Input, Output, dash_table, dcc, html
+from dash import ALL, Dash, Input, Output, State, dash_table, dcc, html
+
+from load_script import main as refresh_database
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -21,7 +22,7 @@ DATA_DIR = BASE_DIR / "data"
 
 FORECAST_PATH = DATA_DIR / "daily_weather_forecast.csv"
 TOURISM_PATH = DATA_DIR / "tourism.csv"
-WEATHER_CODES_PATH = DATA_DIR / "weather_codes.xlsx"
+WEATHER_CODES_PATH = DATA_DIR / "weather_codes_v2.xlsx"
 
 CATEGORY_COLUMNS = [
     "water",
@@ -43,8 +44,35 @@ CATEGORY_LABELS = {
 
 
 def load_weather_codes() -> pd.DataFrame:
-    """Return one row per WMO weather code with a readable description."""
+    """Return one row per WMO weather code with a readable description.
+
+    Supports the v2 workbook which contains explicit columns:
+    - weather_code, weather_category, weather_description, severity_level, assets
+    Falls back to legacy `Code`/`Description` format if v2 columns aren't present.
+    """
     weather_codes_df = pd.read_excel(WEATHER_CODES_PATH)
+
+    if "weather_code" in weather_codes_df.columns:
+        # Normalize asset column name if provided as `asset`.
+        if "asset" in weather_codes_df.columns and "assets" not in weather_codes_df.columns:
+            weather_codes_df = weather_codes_df.rename(columns={"asset": "assets"})
+
+        # Ensure numeric weather_code and drop invalid rows
+        weather_codes_df["weather_code"] = pd.to_numeric(weather_codes_df["weather_code"], errors="coerce")
+        weather_codes_df = weather_codes_df.dropna(subset=["weather_code"]) 
+        weather_codes_df["weather_code"] = weather_codes_df["weather_code"].astype(int)
+
+        # Rename description column for backward compatibility
+        if "weather_description" in weather_codes_df.columns:
+            weather_codes_df = weather_codes_df.rename(columns={"weather_description": "description"})
+
+        cols = ["weather_code", "weather_category", "description", "severity_level"]
+        if "assets" in weather_codes_df.columns:
+            cols.append("assets")
+
+        return weather_codes_df[cols].drop_duplicates(subset=["weather_code"])
+
+    # Legacy fallback
     weather_codes_df["Code"] = weather_codes_df["Code"].astype(str).str.split(r"\s*,\s*")
     weather_codes_df = weather_codes_df.explode("Code")
     weather_codes_df["Code"] = pd.to_numeric(weather_codes_df["Code"], errors="coerce")
@@ -68,6 +96,18 @@ def load_forecast() -> pd.DataFrame:
     ) / 2
 
     return forecast_df.sort_values("date")
+
+
+def build_date_options(forecast_df: pd.DataFrame) -> list[dict]:
+    """Return the most recent forecast dates as dropdown options."""
+    latest_forecast = forecast_df.sort_values("date").tail(15)
+    return [
+        {
+            "label": f"Day {idx + 1} — {row.date_label}",
+            "value": row.date.strftime("%Y-%m-%d"),
+        }
+        for idx, row in enumerate(latest_forecast.itertuples())
+    ]
 
 
 def load_tourism() -> pd.DataFrame:
@@ -139,33 +179,6 @@ def score_attractions(
     return ranked_df.sort_values(["score", "attraction"], ascending=[False, True]).head(8)
 
 
-def build_temperature_chart(forecast_df: pd.DataFrame):
-    """Create a Plotly chart for daily high and low temperatures."""
-    fig = px.line(
-        forecast_df,
-        x="date",
-        y=["temperature_2m_max", "temperature_2m_min"],
-        markers=True,
-        labels={"value": "Temperature (F)", "date": "Date", "variable": "Metric"},
-        title="16-Day Temperature Forecast",
-    )
-    fig.update_layout(template="plotly_white", legend_title_text="")
-    return fig
-
-
-def build_precipitation_chart(forecast_df: pd.DataFrame):
-    """Create a Plotly chart for precipitation probability."""
-    fig = px.bar(
-        forecast_df,
-        x="date",
-        y="precipitation_probability_max",
-        labels={"precipitation_probability_max": "Rain chance (%)", "date": "Date"},
-        title="Precipitation Probability",
-    )
-    fig.update_layout(template="plotly_white")
-    return fig
-
-
 forecast_df = load_forecast()
 tourism_df = load_tourism()
 
@@ -192,25 +205,13 @@ app.layout = html.Main(
         html.Section(
             className="controls",
             children=[
-                html.Label("Forecast day", htmlFor="date-select"),
+                html.Label("Forecast range", htmlFor="date-select"),
                 dcc.Dropdown(
                     id="date-select",
-                    options=[
-                        {"label": row.date_label, "value": row.date.strftime("%Y-%m-%d")}
-                        for row in forecast_df.itertuples()
-                    ],
-                    value=forecast_df.iloc[0]["date"].strftime("%Y-%m-%d"),
-                    clearable=False,
-                ),
-                html.Label("Categories", htmlFor="category-select"),
-                dcc.Dropdown(
-                    id="category-select",
-                    options=[
-                        {"label": label, "value": column}
-                        for column, label in CATEGORY_LABELS.items()
-                    ],
-                    value=["culture", "nature"],
+                    options=build_date_options(forecast_df),
+                    value=[build_date_options(forecast_df)[0]["value"]],
                     multi=True,
+                    clearable=False,
                 ),
                 dcc.Checklist(
                     id="adult-only-toggle",
@@ -220,60 +221,31 @@ app.layout = html.Main(
                     value=[],
                     className="checkbox-label",
                 ),
+                html.Button(
+                    "Refresh Weather Data",
+                    id="refresh-db-button",
+                    className="refresh-button",
+                ),
+                html.Div(
+                    id="refresh-status-output",
+                    style={"marginTop": "10px", "display": "none"},
+                ),
             ],
         ),
         html.Section(
             className="metrics",
             children=[
-                html.Div([html.Span("Forecast"), html.Strong(id="weather-summary")]),
                 html.Div([html.Span("Temperature"), html.Strong(id="temperature-summary")]),
-                html.Div([html.Span("Recommendation"), html.Strong(id="activity-summary")]),
             ],
         ),
         html.Section(
-            className="dashboard-grid",
+            className="forecast-days-grid",
+            id="forecast-day-panels",
             children=[
                 html.Div(
-                    className="chart-panel",
-                    children=[dcc.Graph(id="temperature-chart", figure=build_temperature_chart(forecast_df))],
-                ),
-                html.Div(
-                    className="chart-panel",
-                    children=[
-                        dcc.Graph(
-                            id="precipitation-chart",
-                            figure=build_precipitation_chart(forecast_df),
-                        )
-                    ],
-                ),
-            ],
-        ),
-        html.Section(
-            className="recommendation-grid",
-            children=[
-                html.Div(
-                    children=[
-                        html.H2("Top Attraction Matches"),
-                        html.Div(id="recommendation-cards", className="suggestions"),
-                    ]
-                ),
-                html.Div(
-                    children=[
-                        html.H2("Selected Forecast Details"),
-                        dash_table.DataTable(
-                            id="forecast-table",
-                            page_size=1,
-                            style_table={"overflowX": "auto"},
-                            style_cell={
-                                "fontFamily": "Arial",
-                                "fontSize": 13,
-                                "padding": "8px",
-                                "textAlign": "left",
-                            },
-                            style_header={"fontWeight": "bold", "backgroundColor": "#eef2f5"},
-                        ),
-                    ]
-                ),
+                    "Select one or more forecast days from the range above to view the daily forecast summary, temperature range, and the top 3 activity recommendations.",
+                    className="forecast-placeholder",
+                )
             ],
         ),
     ],
@@ -281,62 +253,228 @@ app.layout = html.Main(
 
 
 @app.callback(
-    Output("weather-summary", "children"),
-    Output("temperature-summary", "children"),
-    Output("activity-summary", "children"),
-    Output("recommendation-cards", "children"),
-    Output("forecast-table", "data"),
-    Output("forecast-table", "columns"),
-    Input("date-select", "value"),
-    Input("category-select", "value"),
-    Input("adult-only-toggle", "value"),
+    Output("refresh-status-output", "children"),
+    Output("refresh-status-output", "style"),
+    Output("date-select", "options"),
+    Output("date-select", "value"),
+    Input("refresh-db-button", "n_clicks"),
+    prevent_initial_call=True,
 )
-def update_recommendations(date_value: str, selected_categories: list[str], adult_only_values: list[str]):
-    """Update forecast summaries and attraction recommendations from user inputs."""
-    selected_categories = selected_categories or []
-    selected_date = pd.to_datetime(date_value)
-    forecast_row = forecast_df[forecast_df["date"] == selected_date].iloc[0]
-    weather_class = classify_weather(forecast_row)
-    ranked_attractions = score_attractions(
-        tourism_df,
-        forecast_row,
-        selected_categories,
-        "include" in (adult_only_values or []),
-    )
+def update_database(n_clicks):
+    """Trigger database refresh with latest weather data from Open-Meteo and reload the UI options."""
+    global forecast_df
+    if not n_clicks:
+        options = build_date_options(forecast_df)
+        return "", {"display": "none"}, options, [options[0]["value"]]
+    
+    try:
+        refresh_database()
+        # Reload forecast data into memory
+        forecast_df = load_forecast()
+        latest_options = build_date_options(forecast_df)
+        latest_value = [latest_options[0]["value"]] if latest_options else []
+        message = "✓ Weather data updated successfully!"
+        style = {
+            "marginTop": "10px",
+            "padding": "12px",
+            "backgroundColor": "#d4edda",
+            "color": "#155724",
+            "borderRadius": "4px",
+            "border": "1px solid #c3e6cb",
+        }
+        return message, style, latest_options, latest_value
+    except Exception as e:
+        message = f"✗ Error updating weather data: {str(e)}"
+        style = {
+            "marginTop": "10px",
+            "padding": "12px",
+            "backgroundColor": "#f8d7da",
+            "color": "#721c24",
+            "borderRadius": "4px",
+            "border": "1px solid #f5c6cb",
+        }
+        return message, style, build_date_options(forecast_df), [build_date_options(forecast_df)[-1]["value"]]
 
-    cards = []
-    for row in ranked_attractions.itertuples():
-        website = str(row.website).strip()
-        website_href = website if website.startswith("http") else f"https://{website}"
-        category_matches = [
-            CATEGORY_LABELS[column]
-            for column in selected_categories
-            if column in ranked_attractions.columns and getattr(row, column)
-        ]
-        category_text = ", ".join(category_matches) if category_matches else "General match"
 
-        cards.append(
+@app.callback(
+    Output("temperature-summary", "children"),
+    Output("forecast-day-panels", "children"),
+    Input("date-select", "value"),
+    Input("adult-only-toggle", "value"),
+    Input({"type": "day-category-select", "date": ALL}, "value"),
+    State({"type": "day-category-select", "date": ALL}, "id"),
+    prevent_initial_call=False,
+)
+def update_recommendations(
+    selected_dates: list[str],
+    adult_only_values: list[str],
+    day_category_values: list[list[str]],
+    day_category_ids: list[dict],
+):
+    """Update forecast summaries and daily activity recommendations from user inputs."""
+    selected_dates = selected_dates or []
+    adult_only_values = adult_only_values or []
+    if isinstance(selected_dates, str):
+        selected_dates = [selected_dates]
+
+    categories_by_day = {}
+    for item, value in zip(day_category_ids or [], day_category_values or []):
+        date_key = None
+        if isinstance(item, dict) and "date" in item:
+            date_key = item["date"]
+        elif isinstance(item, dict) and "id" in item and isinstance(item["id"], dict):
+            date_key = item["id"].get("date")
+
+        if date_key is not None:
+            categories_by_day[date_key] = value or []
+
+    selected_dates = selected_dates[:15]
+    if not selected_dates:
+        return (
+            "No forecast selected",
+            [
+                html.Div(
+                    "Please select one or more days from the Forecast range dropdown.",
+                    className="empty-state",
+                )
+            ],
+        )
+
+    day_panels = []
+    selected_labels = []
+    for date_value in selected_dates:
+        selected_date = pd.to_datetime(date_value)
+        forecast_row = forecast_df[forecast_df["date"] == selected_date]
+        if forecast_row.empty:
+            continue
+        forecast_row = forecast_row.iloc[0]
+        selected_labels.append(forecast_row["date_label"])
+        selected_categories = categories_by_day.get(date_value, [])
+        weather_class = classify_weather(forecast_row)
+        ranked_attractions = score_attractions(
+            tourism_df,
+            forecast_row,
+            selected_categories,
+            "include" in adult_only_values,
+        ).head(3)
+
+        activity_cards = []
+        for row in ranked_attractions.itertuples():
+            website = str(row.website).strip()
+            website_href = website if website.startswith("http") else f"https://{website}" if website else "#"
+            category_matches = [
+                CATEGORY_LABELS[column]
+                for column in selected_categories
+                if column in ranked_attractions.columns and getattr(row, column)
+            ]
+            category_text = ", ".join(category_matches) if category_matches else "General match"
+
+            activity_cards.append(
+                html.Article(
+                    className="day-activity-card",
+                    children=[
+                        html.Strong(row.attraction),
+                        html.Span("Indoor" if row.is_indoor else "Outdoor"),
+                        html.P(category_text),
+                        html.A("Visit website", href=website_href, target="_blank"),
+                    ],
+                )
+            )
+
+        # Build header with optional weather asset icon
+        header_children = []
+        asset_file = forecast_row.get("assets") or forecast_row.get("asset")
+        asset_path = None
+        if asset_file and isinstance(asset_file, str) and asset_file.strip():
+            candidate = Path(__file__).resolve().parent / "assets" / asset_file
+            if candidate.exists():
+                asset_path = asset_file
+        if not asset_path:
+            asset_path = "default-weather-icon.svg"
+
+        header_children.append(html.Img(src=f"/assets/{asset_path}", className="weather-icon", alt="Weather icon"))
+        header_children.extend([
+            html.H2(forecast_row["date_label"]),
+            html.P(forecast_row.get("description", "No description")),
+        ])
+
+        day_panels.append(
             html.Article(
-                className="suggestion-card",
+                className="forecast-day-panel",
                 children=[
-                    html.Strong(row.attraction),
-                    html.Span("Indoor" if row.is_indoor else "Outdoor"),
-                    html.P(category_text),
-                    html.A("Website", href=website_href, target="_blank"),
+                    html.Div(
+                        className="forecast-day-header",
+                        children=header_children,
+                    ),
+                    html.Div(
+                        className="day-filter-row",
+                        children=[
+                            html.Label("Event types"),
+                            dcc.Dropdown(
+                                id={"type": "day-category-select", "date": date_value},
+                                options=[
+                                    {"label": label, "value": key}
+                                    for key, label in CATEGORY_LABELS.items()
+                                ],
+                                value=categories_by_day.get(date_value, []),
+                                multi=True,
+                                placeholder="Choose event types",
+                                clearable=False,
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        className="day-summary-cards",
+                        children=[
+                            html.Div(
+                                className="day-summary-card",
+                                children=[
+                                    html.Span("Forecast"),
+                                    html.Strong(forecast_row.get("description", "No description")),
+                                ],
+                            ),
+                            html.Div(
+                                className="day-summary-card",
+                                children=[
+                                    html.Span("Temperature"),
+                                    html.Strong(
+                                        f"{forecast_row['temperature_2m_min']:.0f}F low / {forecast_row['temperature_2m_max']:.0f}F high"
+                                    ),
+                                ],
+                            ),
+                            html.Div(
+                                className="day-summary-card",
+                                children=[
+                                    html.Span("Recommendation"),
+                                    html.Strong(weather_class["activity_mode"].capitalize()),
+                                    html.Small(
+                                        weather_class["summary"],
+                                        className="recommendation-detail",
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        className="day-activities-group",
+                        children=[
+                            html.H3("Top 3 activities"),
+                            html.Div(className="day-activities", children=activity_cards),
+                        ],
+                    ),
                 ],
             )
         )
 
-    table_df = pd.DataFrame([forecast_row]).drop(columns=["date_label"], errors="ignore")
-    table_df["date"] = table_df["date"].dt.strftime("%Y-%m-%d")
+    range_text = (
+        f"{selected_labels[0]} through {selected_labels[-1]}"
+        if len(selected_labels) > 1
+        else selected_labels[0]
+    )
 
     return (
-        f"{forecast_row['date_label']} - {forecast_row.get('description', 'No description')}",
-        f"{forecast_row['temperature_2m_min']:.0f}F low / {forecast_row['temperature_2m_max']:.0f}F high",
-        weather_class["summary"],
-        cards,
-        table_df.to_dict("records"),
-        [{"name": column, "id": column} for column in table_df.columns],
+        range_text,
+        day_panels,
     )
 
 

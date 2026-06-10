@@ -111,6 +111,79 @@ Key libraries:
 - `openpyxl`: Excel file handling
 - `openmeteo_requests`: Optional wrapper library for Open-Meteo API
 
+## Setup and Run
+
+1. Create and activate a Python virtual environment:
+   - Windows:
+     ```powershell
+     python -m venv .venv
+     .\.venv\Scripts\Activate.ps1
+     ```
+   - macOS / Linux:
+     ```bash
+     python3 -m venv .venv
+     source .venv/bin/activate
+     ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Configure database credentials in a `.env` file at the repository root.
+
+   Option A: Supabase project ref and password
+   ```env
+   DB_PASSWORD=your_database_password
+   DB_REF=your_supabase_project_ref
+   RESET_TABLES=true
+   ```
+
+   Option B: direct database URL
+   ```env
+   SUPABASE_DB_URL=postgresql+psycopg2://postgres:your_password@db.<your_ref>.supabase.co:5432/postgres
+   RESET_TABLES=true
+   ```
+
+4. Verify required data files exist in `data/`:
+   - `tourism.csv`
+   - `weather_codes_v2.xlsx`
+   - `daily_weather_forecast.csv` (optional; the app can refresh it)
+
+5. Run the ETL loader to refresh weather data and load your database:
+   ```bash
+   python load_script.py
+   ```
+
+6. Run the Dash app:
+   ```bash
+   python app.py
+   ```
+
+7. Open the app in your browser:
+   ```text
+   http://127.0.0.1:8050/
+   ```
+
+## Access from another computer
+
+If you want to access the app from a different machine on the same network, edit `app.py` at the bottom and change:
+```python
+if __name__ == "__main__":
+    app.run(debug=True, port=int(os.getenv("PORT", "8050")))
+```
+
+to:
+```python
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", "8050")))
+```
+
+Then open in a browser from another device using:
+```text
+http://<host-machine-ip>:8050/
+```
+
 ## API Reference
 
 **Open-Meteo API**: https://open-meteo.com/en/docs

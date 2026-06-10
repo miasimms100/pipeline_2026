@@ -45,16 +45,17 @@ The database contains six tables:
 
 **Purpose**
 
-Stores standardized WMO (World Meteorological Organization) weather interpretation codes and their descriptions.
+Stores standardized WMO (World Meteorological Organization) weather interpretation codes with categorization and severity information.
 
 **Example**
 
-- Code `0` = Clear sky
-- Code `61` = Rain: Slight intensity
+- Code `0` = Clear sky, Clear category, Severity 1
+- Code `61` = Rain: Slight intensity, Rain category, Severity 1
+- Code `80` = Showers: Moderate intensity, Showers category, Severity 3
 
 **Primary Key**
 
-- `weather_code_id`
+- `weather_code`
 
 **Relationships**
 
@@ -65,8 +66,11 @@ Stores standardized WMO (World Meteorological Organization) weather interpretati
 
 | Column Name | Data Type | Key | Description |
 | --- | --- | --- | --- |
-| `weather_code_id` | `INTEGER` | Primary Key | Unique WMO weather condition code |
-| `description` | `TEXT` |  | Description of the weather condition |
+| `weather_code` | `INTEGER` | Primary Key | Unique WMO weather condition code (0-100) |
+| `weather_category` | `TEXT` |  | Category/type of weather (e.g., Clear, Clouds, Rain, Snow, Fog) |
+| `weather_description` | `TEXT` |  | Detailed description of the weather condition |
+| `severity_level` | `INTEGER` |  | Severity indicator (1=light/clear, 2=moderate, 3=heavy/severe) |
+| `assets` | `TEXT` |  | Asset filename for weather icon/image matching the conditions |
 
 ---
 
@@ -90,7 +94,7 @@ Stores daily weather forecast information from the Open-Meteo API.
 
 **Foreign Keys**
 
-- `weather_code_id` → `weather_code.weather_code_id`
+- `weather_code_id` → `weather_code.weather_code`
 
 **Relationships**
 
